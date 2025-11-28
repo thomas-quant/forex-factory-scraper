@@ -1,6 +1,6 @@
 # Forex Factory Economic Calendar Scraper
 
-A Python toolkit for scraping and processing economic calendar data from [Forex Factory](https://www.forexfactory.com/calendar). Extracts high-impact USD economic events and bank holidays into a clean Parquet dataset.
+A Python toolkit for scraping and processing economic calendar data from [Forex Factory](https://www.forexfactory.com/calendar). By default extracts high-impact USD economic events and bank holidays into a clean Parquet dataset, however all economic events are preserved and parsing can be customized in pipeline.py.
 
 ## Features
 
