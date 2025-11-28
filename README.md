@@ -1,13 +1,23 @@
 # Forex Factory Economic Calendar Scraper
 
-A Python toolkit for scraping and processing economic calendar data from [Forex Factory](https://www.forexfactory.com/calendar). By default extracts high-impact USD economic events and bank holidays into a clean Parquet dataset, however all economic events are preserved and parsing can be customized in pipeline.py.
+A high-performance Python toolkit for scraping and processing economic calendar data from [Forex Factory](https://www.forexfactory.com/calendar). By default extracts high-impact USD economic events and bank holidays into a clean Parquet dataset, however all economic events are preserved and parsing can be customized in pipeline.py.
 
 ## Features
 
-- **Cloudflare Bypass** — Uses `undetected-chromedriver` with your real Chrome profile to avoid bot detection
-- **Incremental Scraping** — Skips already-downloaded months; safe to interrupt and resume
-- **Data Pipeline** — Parses JSON → filters by currency/impact → removes noise → outputs Parquet
-- **Cross-Platform** — Auto-detects Chrome profile path on Windows, macOS, and Linux
+- **⚡ 37% Faster** — Uses [nodriver](https://ultrafunkamsterdam.github.io/nodriver/) with direct CDP communication (no Selenium overhead)
+- **🛡️ Cloudflare Bypass** — Undetected browser automation that passes bot checks
+- **🚀 Optimized Loading** — Blocks images, fonts, CSS, and trackers for maximum speed
+- **📦 Incremental Scraping** — Skips already-downloaded months; safe to interrupt and resume
+- **🔄 Data Pipeline** — Parses JSON → filters by currency/impact → removes noise → outputs Parquet
+
+## Performance
+
+| Scraper | 6 Months | Technology |
+|---------|----------|------------|
+| `scrape.py` | **10.3s** | nodriver (CDP) |
+| `scrape_selenium.py` | 16.5s | undetected-chromedriver (Selenium) |
+
+**nodriver is 37% faster** thanks to direct Chrome DevTools Protocol communication and aggressive resource blocking.
 
 ## Quick Start
 
@@ -20,12 +30,15 @@ pip install -r requirements.txt
 ### 2. Scrape Data
 
 ```bash
-# First run: leave browser visible to pass any Cloudflare checks
+# Recommended: Use the fast nodriver scraper
 python scrape.py
+
+# Alternative: Selenium-based scraper (more stable, slower)
+python scrape_selenium.py
 ```
 
 The scraper will:
-1. Open Chrome with your profile
+1. Open Chrome (creates a dedicated profile in `./nodriver_profile`)
 2. Navigate to each month's calendar page
 3. Extract calendar data from the page's JavaScript state
 4. Save raw JSON to `out/days_YYYY_MM.json`
@@ -56,32 +69,34 @@ The pipeline produces `economic_events.parquet` with the following schema:
 
 ## Configuration
 
-### Chrome Profile Path
+### nodriver Scraper (`scrape_nodriver.py`)
 
-**Important:** Edit `scrape.py` and set your Chrome user data path in the config section:
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `START_DATE` | `2021-01-01` | Scraping start date |
+| `END_DATE` | `2025-12-31` | Scraping end date |
+| `HEADLESS` | `False` | Run headless (faster but riskier for CF) |
+| `BLOCK_RESOURCES` | `True` | Block images/fonts/CSS for speed |
 
+**Speed tuning:**
 ```python
-# Chrome profile path (change this to your Chrome user data path!)
+WAIT_SECS = 2.0        # Max time to wait for calendar data
+POST_LOAD_DELAY = 1.0  # Delay after navigation for JS to hydrate
+POLL_INTERVAL = 0.05   # How often to check for data
+BETWEEN_PAGES = 0.1    # Delay between pages
+```
+
+### Selenium Scraper (`scrape.py`)
+
+Edit `USER_DATA_DIR` to point to your Chrome profile:
+```python
 USER_DATA_DIR = r"C:\Users\YOUR_USERNAME\AppData\Local\Google\Chrome\User Data"
-PROFILE_DIR   = "Default"  # e.g. "Profile 1", "Default", etc.
 ```
 
 Common paths by OS:
 - **Windows:** `C:\Users\<USERNAME>\AppData\Local\Google\Chrome\User Data`
 - **macOS:** `~/Library/Application Support/Google/Chrome`
 - **Linux:** `~/.config/google-chrome`
-
-### Other Settings
-
-Edit these constants in `scrape.py` as needed:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `START_DATE` | `2021-01-01` | Scraping start date |
-| `END_DATE` | `2025-12-31` | Scraping end date |
-| `OUT_DIR` | `out` | Output directory for JSON |
-| `PROXY` | `""` | Optional proxy URL |
-| `HEADLESS` | `False` | Run headless (riskier for CF) |
 
 ### Pipeline Configuration
 
@@ -95,9 +110,11 @@ KEEP_IMPACTS = {"high", "holiday"}  # Filter by impact level
 ## Project Structure
 
 ```
-├── scrape.py           # Web scraper using undetected-chromedriver
+├── scrape_nodriver.py  # Fast async scraper using nodriver (recommended)
+├── scrape.py           # Selenium scraper using undetected-chromedriver
 ├── pipeline.py         # Data processing pipeline
 ├── requirements.txt    # Python dependencies
+├── nodriver_profile/   # Dedicated Chrome profile for nodriver
 ├── out/                # Scraped JSON data
 │   ├── days_2021_01.json
 │   ├── days_2021_02.json
@@ -108,7 +125,7 @@ KEEP_IMPACTS = {"high", "holiday"}  # Filter by impact level
 ## Tips
 
 ### First Run
-Run the scraper with browser visible (default). If Cloudflare presents a challenge, solve it manually once—your session cookies will persist in your Chrome profile.
+Run with browser visible (`HEADLESS = False`). If Cloudflare presents a challenge, solve it manually once—cookies persist in the scraper profile.
 
 ### Handling Blocks
 If you get blocked:
@@ -116,8 +133,18 @@ If you get blocked:
 2. Solve the captcha in the browser window
 3. Press Enter in the terminal to continue
 
-### Rate Limiting
-The scraper includes random delays between requests. Avoid running too frequently to prevent IP blocks.
+### Which Scraper to Use?
+- **`scrape.py`** — Use this. It's faster and doesn't require configuring your Chrome profile path.
+- **`scrape_selenium.py`** — Fallback if nodriver has issues. Uses your real Chrome profile (better for persistent cookies).
+
+## Why nodriver?
+
+[nodriver](https://ultrafunkamsterdam.github.io/nodriver/) is the official successor to `undetected-chromedriver`:
+
+- **No Selenium/webdriver** — Direct Chrome DevTools Protocol communication
+- **Fully async** — Non-blocking I/O for better performance  
+- **Better stealth** — Improved WAF/bot detection resistance
+- **No chromedriver binary** — Less setup, fewer version mismatches
 
 ## Data Source
 
@@ -126,5 +153,3 @@ Data is scraped from the Forex Factory economic calendar. This tool is for perso
 ## License
 
 MIT
-
-
