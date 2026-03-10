@@ -26,6 +26,8 @@ CLEAN_CSV = "ff_usd_high_holiday_clean.csv" # output from sanitize step
 OUT_PARQUET = "economic_events.parquet"     # final parquet output
 KEEP_CURRENCIES = {"USD"}                   # only USD
 KEEP_IMPACTS = {"high", "holiday"}          # red folder + bank holidays
+PARQUET_COMPRESSION = "zstd"
+PARQUET_COMPRESSION_LEVEL = 3
 # ==========================
 
 
@@ -176,8 +178,19 @@ def csv_to_parquet(csv_path: str, parquet_path: str = None) -> str:
         df = df.drop(columns=["date", "time_utc"])
         df = df[["datetime_utc"] + [c for c in df.columns if c != "datetime_utc"]]
 
-    df.to_parquet(parquet_path, index=False)
+    write_parquet(df, parquet_path)
     print(f"[parquet] converted -> {parquet_path}")
+    return parquet_path
+
+
+def write_parquet(df: pd.DataFrame, parquet_path: str) -> str:
+    """Write parquet files with the project's standard compression settings."""
+    df.to_parquet(
+        parquet_path,
+        index=False,
+        compression=PARQUET_COMPRESSION,
+        compression_level=PARQUET_COMPRESSION_LEVEL,
+    )
     return parquet_path
 
 
@@ -215,7 +228,7 @@ def run_pipeline(out_parquet: str = OUT_PARQUET):
         df = df.drop(columns=["date", "time_utc"])
         df = df[["datetime_utc"] + [c for c in df.columns if c != "datetime_utc"]]
 
-    df.to_parquet(out_parquet, index=False)
+    write_parquet(df, out_parquet)
     print(f"[done] {len(df)} rows -> {out_parquet}")
 
 
