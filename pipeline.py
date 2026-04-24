@@ -94,6 +94,7 @@ def flatten_events(days, src_path=None):
                 "impact": impact,
                 "title": title,
                 "id": ev.get("id", ""),
+                "leaked": ev.get("leaked"),
             }
 
 
@@ -122,7 +123,7 @@ def parse_json_to_csv(
     rows.sort(key=lambda x: (x["date"], x["time_utc"], x["title"]))
 
     os.makedirs(os.path.dirname(out_csv) or ".", exist_ok=True)
-    cols = ["date", "time_utc", "currency", "impact", "title", "id"]
+    cols = ["date", "time_utc", "currency", "impact", "title", "id", "leaked"]
     with open(out_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()

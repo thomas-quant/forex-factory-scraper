@@ -75,5 +75,76 @@ class PipelineParquetCompressionTests(unittest.TestCase):
             self.assertEqual(kwargs["compression_level"], 3)
 
 
+class PipelineLeakedFieldTests(unittest.TestCase):
+    def test_parse_json_to_csv_includes_leaked_column(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            in_dir = tmp_path / "out"
+            in_dir.mkdir()
+            csv_path = tmp_path / "parsed.csv"
+
+            (in_dir / "days_2026_03.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "events": [
+                                {
+                                    "currency": "USD",
+                                    "impactName": "high",
+                                    "name": "CPI y/y",
+                                    "dateline": 1772368200,
+                                    "id": "cpi-1",
+                                    "leaked": True,
+                                }
+                            ]
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            pipeline.parse_json_to_csv(in_dir=str(in_dir), out_csv=str(csv_path))
+
+            with csv_path.open("r", encoding="utf-8", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+
+            self.assertEqual(rows[0]["leaked"], "True")
+
+    def test_run_pipeline_preserves_leaked_in_parquet_dataframe(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            in_dir = tmp_path / "out"
+            in_dir.mkdir()
+            out_path = tmp_path / "economic_events.parquet"
+
+            (in_dir / "days_2026_03.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "events": [
+                                {
+                                    "currency": "USD",
+                                    "impactName": "high",
+                                    "name": "CPI y/y",
+                                    "dateline": 1772368200,
+                                    "id": "cpi-1",
+                                    "leaked": True,
+                                }
+                            ]
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(pipeline.pd.DataFrame, "to_parquet", autospec=True) as to_parquet:
+                with patch.object(pipeline, "IN_DIR", str(in_dir)):
+                    pipeline.run_pipeline(out_parquet=str(out_path))
+
+            df = to_parquet.call_args.args[0]
+            self.assertIn("leaked", df.columns)
+            self.assertEqual(df.loc[0, "leaked"], True)
+
+
 if __name__ == "__main__":
     unittest.main()
