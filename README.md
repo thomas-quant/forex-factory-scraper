@@ -1,23 +1,25 @@
 # Forex Factory Economic Calendar Scraper
 
-A high-performance Python toolkit for scraping and processing economic calendar data from [Forex Factory](https://www.forexfactory.com/calendar). By default extracts high-impact USD economic events and bank holidays into a clean Parquet dataset, however all economic events are preserved and parsing can be customized in pipeline.py.
+A Python toolkit for scraping and processing economic calendar data from [Forex Factory](https://www.forexfactory.com/calendar). It scrapes raw month JSON files and then runs the existing pipeline to produce a Parquet dataset.
 
 ## Features
 
-- **⚡ 37% Faster** — Uses [nodriver](https://ultrafunkamsterdam.github.io/nodriver/) with direct CDP communication (no Selenium overhead)
-- **🛡️ Cloudflare Bypass** — Undetected browser automation that passes bot checks
-- **🚀 Optimized Loading** — Blocks images, fonts, CSS, and trackers for maximum speed
-- **📦 Incremental Scraping** — Skips already-downloaded months; safe to interrupt and resume
-- **🔄 Data Pipeline** — Parses JSON → filters by currency/impact → removes noise → outputs Parquet
+- **Browserless scraping** — `scrape.py` uses `curl_cffi` instead of browser automation
+- **Proven parity** — matched the old headed nodriver scraper across the tested comparison span
+- **Faster runs** — measured much faster than headed nodriver in local comparison runs
+- **Incremental scraping** — skips already-downloaded months; safe to interrupt and resume
+- **Pipeline unchanged** — JSON → CSV → cleaned CSV → Parquet
 
 ## Performance
 
-| Scraper | 6 Months | Technology |
-|---------|----------|------------|
-| `scrape.py` | **10.3s** | nodriver (CDP) |
-| `scrape_selenium.py` | 16.5s | undetected-chromedriver (Selenium) |
+Measured locally over **2021-01-01 → 2021-06-30**:
 
-**nodriver is 37% faster** thanks to direct Chrome DevTools Protocol communication and aggressive resource blocking.
+| Scraper | Time | Notes |
+|---------|------|-------|
+| `scrape.py` | **6.171s** | current `curl_cffi` scraper |
+| old headed nodriver | 17.678s | Windows Chromium, headed |
+
+On that same 6-month span, the current scraper matched the old headed nodriver output exactly while running about **2.87x faster**.
 
 ## Quick Start
 
@@ -30,18 +32,20 @@ pip install -r requirements.txt
 ### 2. Scrape Data
 
 ```bash
-# Recommended: Use the fast nodriver scraper
 python scrape.py
-
-# Alternative: Selenium-based scraper (more stable, slower)
-python scrape_selenium.py
 ```
 
-The scraper will:
-1. Open Chrome (creates a dedicated profile in `./nodriver_profile`)
-2. Navigate to each month's calendar page
-3. Extract calendar data from the page's JavaScript state
-4. Save raw JSON to `out/days_YYYY_MM.json`
+`scrape.py` fetches Forex Factory HTML with `curl_cffi`, extracts the embedded calendar state, and writes raw JSON to `out/days_YYYY_MM.json`.
+
+Example:
+
+```bash
+python scrape.py --start-date 2026-03-01 --end-date 2026-03-31
+python scrape.py --start-date 2026-03-01 --end-date 2026-03-31 --between-pages-delay 1.0
+python scrape.py --start-date 2026-03-01 --end-date 2026-03-31 --retry-delay 0.5
+```
+
+Both delay settings default to `0`.
 
 ### 3. Process Data
 
@@ -69,34 +73,16 @@ The pipeline produces `economic_events.parquet` with the following schema:
 
 ## Configuration
 
-### nodriver Scraper (`scrape_nodriver.py`)
+### Scraper (`scrape.py`)
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `START_DATE` | `2021-01-01` | Scraping start date |
-| `END_DATE` | `2025-12-31` | Scraping end date |
-| `HEADLESS` | `False` | Run headless (faster but riskier for CF) |
-| `BLOCK_RESOURCES` | `True` | Block images/fonts/CSS for speed |
-
-**Speed tuning:**
-```python
-WAIT_SECS = 2.0        # Max time to wait for calendar data
-POST_LOAD_DELAY = 1.0  # Delay after navigation for JS to hydrate
-POLL_INTERVAL = 0.05   # How often to check for data
-BETWEEN_PAGES = 0.1    # Delay between pages
-```
-
-### Selenium Scraper (`scrape.py`)
-
-Edit `USER_DATA_DIR` to point to your Chrome profile:
-```python
-USER_DATA_DIR = r"C:\Users\YOUR_USERNAME\AppData\Local\Google\Chrome\User Data"
-```
-
-Common paths by OS:
-- **Windows:** `C:\Users\<USERNAME>\AppData\Local\Google\Chrome\User Data`
-- **macOS:** `~/Library/Application Support/Google/Chrome`
-- **Linux:** `~/.config/google-chrome`
+| `END_DATE` | `2021-06-30` | Scraping end date |
+| `OUT_DIR` | `out` | Output directory |
+| `MAX_ATTEMPTS` | `3` | Retries per month |
+| `BETWEEN_PAGES_DELAY` | `0.0` | Delay between month requests |
+| `RETRY_DELAY` | `0.0` | Delay before retrying failed requests |
 
 ### Pipeline Configuration
 
@@ -110,41 +96,21 @@ KEEP_IMPACTS = {"high", "holiday"}  # Filter by impact level
 ## Project Structure
 
 ```
-├── scrape_nodriver.py  # Fast async scraper using nodriver (recommended)
-├── scrape.py           # Selenium scraper using undetected-chromedriver
-├── pipeline.py         # Data processing pipeline
-├── requirements.txt    # Python dependencies
-├── nodriver_profile/   # Dedicated Chrome profile for nodriver
-├── out/                # Scraped JSON data
+├── scrape.py         # Browserless scraper using curl_cffi
+├── pipeline.py       # Data processing pipeline
+├── requirements.txt  # Python dependencies
+├── out/              # Scraped JSON data
 │   ├── days_2021_01.json
 │   ├── days_2021_02.json
 │   └── ...
 └── economic_events.parquet  # Final processed output
 ```
 
-## Tips
+## Notes
 
-### First Run
-Run with browser visible (`HEADLESS = False`). If Cloudflare presents a challenge, solve it manually once—cookies persist in the scraper profile.
-
-### Handling Blocks
-If you get blocked:
-1. The scraper saves a screenshot to `out/cf_block_YYYY_MM.png`
-2. Solve the captcha in the browser window
-3. Press Enter in the terminal to continue
-
-### Which Scraper to Use?
-- **`scrape.py`** — Use this. It's faster and doesn't require configuring your Chrome profile path.
-- **`scrape_selenium.py`** — Fallback if nodriver has issues. Uses your real Chrome profile (better for persistent cookies).
-
-## Why nodriver?
-
-[nodriver](https://ultrafunkamsterdam.github.io/nodriver/) is the official successor to `undetected-chromedriver`:
-
-- **No Selenium/webdriver** — Direct Chrome DevTools Protocol communication
-- **Fully async** — Non-blocking I/O for better performance  
-- **Better stealth** — Improved WAF/bot detection resistance
-- **No chromedriver binary** — Less setup, fewer version mismatches
+- The old nodriver and Selenium scrapers have been removed.
+- `scrape.py` is now the single scraper entrypoint.
+- Comparison runs showed exact output parity against the old headed nodriver path for the tested range.
 
 ## Data Source
 
