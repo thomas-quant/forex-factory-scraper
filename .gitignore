@@ -3,3 +3,6 @@
 out/
 
 .worktrees/
+.venv/
+__pycache__/
+*.pyc

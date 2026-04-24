@@ -2,7 +2,7 @@
 
 # Web scraping
 setuptools>=65.0.0  # Required for distutils (removed in Python 3.12)
-undetected-chromedriver>=3.5.0
+curl_cffi>=0.13.0
 
 # Data processing
 pandas>=2.0.0
