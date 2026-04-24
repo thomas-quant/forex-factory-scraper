@@ -6,20 +6,27 @@ A Python toolkit for scraping and processing economic calendar data from [Forex 
 
 - **Browserless scraping** — `scrape.py` uses `curl_cffi` instead of browser automation
 - **Proven parity** — matched the old headed nodriver scraper across the tested comparison span
-- **Faster runs** — measured much faster than headed nodriver in local comparison runs
+- **Faster runs** — documented faster than both legacy browser automation paths
 - **Incremental scraping** — skips already-downloaded months; safe to interrupt and resume
 - **Pipeline unchanged** — JSON → CSV → cleaned CSV → Parquet
 
 ## Performance
 
-Measured locally over **2021-01-01 → 2021-06-30**:
+For **2021-01-01 → 2021-06-30**:
 
 | Scraper | Time | Notes |
 |---------|------|-------|
-| `scrape.py` | **6.171s** | current `curl_cffi` scraper |
-| old headed nodriver | 17.678s | Windows Chromium, headed |
+| `scrape_selenium.py` | 16.5s | legacy `undetected-chromedriver` figure from the old README |
+| old nodriver `scrape.py` | 10.3s | legacy nodriver figure from the old README |
+| current `scrape.py` | **6.171s** | current `curl_cffi` scraper |
 
-On that same 6-month span, the current scraper matched the old headed nodriver output exactly while running about **2.87x faster**.
+Stepwise speedups on that same 6-month span:
+
+- nodriver was **37.6% faster** than `undetected-chromedriver`
+- `curl_cffi` is **40.1% faster** than nodriver
+- `curl_cffi` is **62.6% faster** than `undetected-chromedriver` overall
+
+The current scraper also matched the old headed nodriver output exactly on the tested 6-month comparison span.
 
 ## Quick Start
 
