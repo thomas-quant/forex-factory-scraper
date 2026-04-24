@@ -1,3 +1,5 @@
 *.csv
 *.parquet
 out/
+
+.worktrees/
