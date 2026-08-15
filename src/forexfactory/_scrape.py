@@ -32,6 +32,9 @@ logger = logging.getLogger(__name__)
 OUT_DIR = "out"
 
 # curl_cffi request settings
+# Floating alias on purpose: it tracks curl_cffi's newest Chrome profile, so the
+# fingerprint stays current as the library updates.  Do NOT pair this with a
+# hardcoded user-agent header (see HEADERS below).
 IMPERSONATE = "chrome"
 REQUEST_TIMEOUT = 30
 MAX_ATTEMPTS = 3
@@ -47,10 +50,12 @@ HEADERS = {
     "pragma": "no-cache",
     "referer": "https://www.forexfactory.com/",
     "upgrade-insecure-requests": "1",
-    "user-agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-    ),
+    # NO "user-agent" HERE — DELIBERATE.  curl_cffi derives a User-Agent that matches
+    # the IMPERSONATE profile's TLS/JA3 fingerprint.  Hardcoding one desynchronises the
+    # two the moment the profile moves: a pinned Chrome/131 UA against the chrome146
+    # fingerprint that IMPERSONATE="chrome" resolves to under curl_cffi 0.16 is a 403
+    # from Forex Factory on every request.  Let the profile own the UA.
+    # Guarded by test_headers_declare_no_user_agent.
 }
 # ====================
 

@@ -115,6 +115,18 @@ class ScrapeTests(unittest.TestCase):
         self.assertEqual(session.calls[1][1]["impersonate"], scraper.IMPERSONATE)
         self.assertEqual(session.calls[1][1]["timeout"], scraper.REQUEST_TIMEOUT)
 
+    def test_headers_declare_no_user_agent(self):
+        """HEADERS must not hardcode a UA — curl_cffi derives one from IMPERSONATE.
+
+        Regression guard for the 1.1.2 fix: a pinned Chrome/131 UA sent alongside the
+        chrome146 TLS fingerprint that IMPERSONATE="chrome" resolves to under
+        curl_cffi 0.16 made Forex Factory return 403 on every request.  Any hardcoded
+        UA desynchronises from the impersonation profile as soon as that profile moves.
+        """
+        header_names = {k.lower() for k in scraper.HEADERS}
+
+        self.assertNotIn("user-agent", header_names)
+
     def test_parse_args_defaults_between_pages_delay_to_one(self):
         """D-11: default delays are 1.0 (polite non-zero), not 0.0."""
         args = scraper.parse_args([])
