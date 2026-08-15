@@ -66,3 +66,70 @@ def surprise_z(df: pd.DataFrame) -> pd.Series:
 
     # Reindex to df.index so row-alignment is guaranteed even after groupby transform.
     return result.reindex(df.index)
+
+
+_VINTAGE_COLUMNS = ("actual", "revision", "ebaseId", "datetime_utc")
+
+
+def actual_initial(df: pd.DataFrame) -> pd.Series:
+    """Return the first-printed actual for every row, row-aligned to df.index.
+
+    Forex Factory preserves the value that printed on release day and never rewrites
+    it, so the stored 'actual' column *is* the initial vintage.  Verified empirically
+    (2026-08-15) by re-scraping 2010-03, 2015-06, 2021-09 and 2024-09 and diffing
+    against a 2026-06-14 snapshot: 0 of 188 actuals changed across the two-month gap,
+    and 'revision' matches the prior release's actual in only 0.2% of pairs — i.e.
+    revisions are carried in their own field rather than overwriting the print.
+
+    This helper exists to name that guarantee at the call site; use it instead of
+    reaching for df["actual"] directly when the point-in-time semantics matter.
+    """
+    if "actual" not in df.columns:
+        return pd.Series(float("nan"), index=df.index)
+    return pd.to_numeric(df["actual"], errors="coerce")
+
+
+def actual_revised(df: pd.DataFrame) -> pd.Series:
+    """Return the latest known actual per row, row-aligned to df.index.
+
+    Forex Factory reports a revision to period N on the release of period N+1: the
+    next row in the same ebaseId series carries the restated figure in its 'revision'
+    field.  So the latest known value for a row is the *next* release's revision when
+    one was published, and the first print otherwise.
+
+    Yields two vintages (first print, first revision) — not a full revision triangle.
+    Later restatements (GDP third estimates, annual benchmark revisions) are only
+    captured when Forex Factory surfaces them in a subsequent 'revision' cell.
+
+    NaN rules mirror surprise() (D-03): a NaN 'actual' (unreleased event) yields NaN,
+    the most recent release in each series has no successor and so falls back to its
+    first print, and missing columns yield an all-NaN Series rather than raising.
+    """
+    if not set(_VINTAGE_COLUMNS).issubset(df.columns):
+        return pd.Series(float("nan"), index=df.index)
+
+    if df.empty:
+        return pd.Series(dtype=float, index=df.index)
+
+    # Positional frame: read() sets a DatetimeIndex that repeats for events sharing a
+    # release time, so index-based alignment would be ambiguous.  reset_index makes the
+    # RangeIndex the identity we sort away from and back to.
+    work = pd.DataFrame(
+        {
+            "dt": pd.to_datetime(df["datetime_utc"], utc=True, errors="coerce"),
+            "ebaseId": df["ebaseId"],
+            "actual": pd.to_numeric(df["actual"], errors="coerce"),
+            "revision": pd.to_numeric(df["revision"], errors="coerce"),
+        }
+    ).reset_index(drop=True)
+
+    # mergesort is the stable kind — ties in (ebaseId, dt) keep their original order.
+    work = work.sort_values(["ebaseId", "dt"], kind="mergesort")
+    next_revision = work.groupby("ebaseId", dropna=False, sort=False)["revision"].shift(-1)
+
+    revised = next_revision.where(next_revision.notna(), work["actual"])
+    # An unreleased event has no vintage at all, even if the row after it was revised.
+    revised = revised.where(work["actual"].notna())
+
+    # sort_index() undoes the sort_values above, restoring df's original row order.
+    return pd.Series(revised.sort_index().to_numpy(), index=df.index, name="actual_revised")

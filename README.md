@@ -147,6 +147,27 @@ df["surprise_z"] = forexfactory.surprise_z(df)  # z-scored over each ebaseId's f
 - `surprise(df)`: `actual − forecast`, verbatim. NaN when either is NaN. Sign is numeric — no polarity adjustment.
 - `surprise_z(df)`: z-scored over each `ebaseId`'s full history in `df`. NaN for groups with fewer than 2 releases or zero standard deviation.
 
+### `forexfactory.actual_initial(df)` and `forexfactory.actual_revised(df)` — point-in-time vintages
+
+Forex Factory preserves the figure that printed on release day and reports any later
+restatement in the *next* release's `revision` cell, rather than overwriting the
+original. That makes the cache a point-in-time archive: scraping 2010 today returns
+2010's first prints. These helpers expose both vintages.
+
+```python
+df = forexfactory.read(currencies=["USD"], impacts=["high"])
+df["actual_initial"] = forexfactory.actual_initial(df)  # what printed on the day
+df["actual_revised"] = forexfactory.actual_revised(df)  # latest known value
+```
+
+- `actual_initial(df)`: the first-printed value — the stored `actual`, named so the point-in-time guarantee is explicit at the call site. **Use this for backtests**: `surprise(df)` is already built on it, so it carries no look-ahead.
+- `actual_revised(df)`: the next release's `revision` when one was published, otherwise the first print. The most recent release in each series has no successor yet and so returns its own print.
+
+Two vintages, not a full revision triangle — later restatements (GDP third estimates,
+annual benchmark revisions) appear only when Forex Factory surfaces them in a
+subsequent `revision` cell. Across the reference cache 45.8% of released events carry
+a revision.
+
 ## Output Schema
 
 The cache stores data as parquet with the following columns (schema_version 3):

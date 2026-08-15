@@ -27,19 +27,20 @@ def test_version_uses_importlib_metadata():
     )
 
 
-def test_version_is_1_1_1():
-    """Installed package version must be 1.1.1 (reflects pyproject.toml bump)."""
+def test_version_is_1_1_2():
+    """Installed package version must be 1.1.2 (reflects pyproject.toml bump)."""
     import forexfactory
 
-    assert forexfactory.__version__ == "1.1.1", (
-        f"Expected '1.1.1', got '{forexfactory.__version__}'"
+    assert forexfactory.__version__ == "1.1.2", (
+        f"Expected '1.1.2', got '{forexfactory.__version__}'"
     )
 
 
 def test_all_lists_exact_public_surface():
-    """__all__ must be exactly ['get', 'read', 'populate', 'surprise', 'surprise_z', '__version__'].
+    """__all__ must be exactly the documented public surface.
 
     Plan 03 (05-03) adds read (API-01 / D-08).
+    1.1.2 adds actual_initial / actual_revised (point-in-time vintage derivation).
     """
     import forexfactory
 
@@ -49,6 +50,8 @@ def test_all_lists_exact_public_surface():
         "populate",
         "surprise",
         "surprise_z",
+        "actual_initial",
+        "actual_revised",
         "__version__",
     ], (f"__all__ mismatch: {forexfactory.__all__}")
 

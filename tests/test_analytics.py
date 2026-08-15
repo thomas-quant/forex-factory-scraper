@@ -525,3 +525,159 @@ class SurpriseZMissingColumnTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# actual_initial() / actual_revised() tests — vintage derivation
+# ---------------------------------------------------------------------------
+
+
+from forexfactory._analytics import actual_initial, actual_revised
+
+
+def _make_series_df(rows: list[dict]) -> pd.DataFrame:
+    """Build a vintage-shaped DataFrame (datetime_utc, ebaseId, actual, revision)."""
+    df = pd.DataFrame(rows)
+    df["datetime_utc"] = pd.to_datetime(df["datetime_utc"], utc=True)
+    return df
+
+
+class ActualInitialTests(unittest.TestCase):
+    """actual_initial is the stored first print, coerced to float."""
+
+    def test_returns_actual_column(self):
+        df = _make_series_df(
+            [
+                {"datetime_utc": "2026-01-09", "ebaseId": 1, "actual": 50.0, "revision": None},
+                {"datetime_utc": "2026-02-11", "ebaseId": 1, "actual": 130.0, "revision": 48.0},
+            ]
+        )
+
+        result = actual_initial(df)
+
+        self.assertEqual(list(result), [50.0, 130.0])
+
+    def test_missing_actual_column_yields_all_nan(self):
+        df = pd.DataFrame({"forecast": [1.0, 2.0]})
+
+        result = actual_initial(df)
+
+        self.assertEqual(len(result), 2)
+        self.assertTrue(result.isna().all())
+
+
+class ActualRevisedTests(unittest.TestCase):
+    """actual_revised takes the NEXT release's revision, else the first print."""
+
+    def test_next_release_revision_supersedes_first_print(self):
+        """Real NFP shape: -92k printed, restated to -133k by the next release."""
+        df = _make_series_df(
+            [
+                {"datetime_utc": "2026-03-06", "ebaseId": 1, "actual": -92.0, "revision": 126.0},
+                {"datetime_utc": "2026-04-03", "ebaseId": 1, "actual": 178.0, "revision": -133.0},
+            ]
+        )
+
+        result = actual_revised(df)
+
+        self.assertEqual(result.iloc[0], -133.0)
+
+    def test_unrevised_row_falls_back_to_first_print(self):
+        """Next release published no revision -> the print stands."""
+        df = _make_series_df(
+            [
+                {"datetime_utc": "2026-03-06", "ebaseId": 1, "actual": 10.0, "revision": None},
+                {"datetime_utc": "2026-04-03", "ebaseId": 1, "actual": 20.0, "revision": None},
+            ]
+        )
+
+        result = actual_revised(df)
+
+        self.assertEqual(result.iloc[0], 10.0)
+
+    def test_latest_release_has_no_successor(self):
+        """The most recent row in a series falls back to its own first print."""
+        df = _make_series_df(
+            [
+                {"datetime_utc": "2026-03-06", "ebaseId": 1, "actual": 10.0, "revision": None},
+                {"datetime_utc": "2026-04-03", "ebaseId": 1, "actual": 20.0, "revision": 9.0},
+            ]
+        )
+
+        result = actual_revised(df)
+
+        self.assertEqual(result.iloc[1], 20.0)
+
+    def test_revisions_do_not_leak_across_ebaseid_series(self):
+        """A revision belongs to its own series only — never the neighbouring event."""
+        df = _make_series_df(
+            [
+                {"datetime_utc": "2026-03-06", "ebaseId": 1, "actual": 10.0, "revision": None},
+                {"datetime_utc": "2026-03-07", "ebaseId": 2, "actual": 99.0, "revision": 777.0},
+                {"datetime_utc": "2026-04-03", "ebaseId": 1, "actual": 20.0, "revision": 11.0},
+            ]
+        )
+
+        result = actual_revised(df)
+
+        self.assertEqual(result.iloc[0], 11.0)  # series 1 picks up its own revision
+        self.assertEqual(result.iloc[1], 99.0)  # series 2 has no successor
+
+    def test_unsorted_input_is_ordered_by_release_time(self):
+        """Row order must not change the answer; output stays in input order."""
+        df = _make_series_df(
+            [
+                {"datetime_utc": "2026-04-03", "ebaseId": 1, "actual": 178.0, "revision": -133.0},
+                {"datetime_utc": "2026-03-06", "ebaseId": 1, "actual": -92.0, "revision": 126.0},
+            ]
+        )
+
+        result = actual_revised(df)
+
+        self.assertEqual(result.iloc[1], -133.0)  # the 03-06 row, still in position 1
+        self.assertEqual(result.iloc[0], 178.0)
+
+    def test_unreleased_event_yields_nan(self):
+        """NaN actual has no vintage even if the following row carries a revision."""
+        df = _make_series_df(
+            [
+                {"datetime_utc": "2026-03-06", "ebaseId": 1, "actual": None, "revision": None},
+                {"datetime_utc": "2026-04-03", "ebaseId": 1, "actual": 20.0, "revision": 5.0},
+            ]
+        )
+
+        result = actual_revised(df)
+
+        self.assertTrue(math.isnan(result.iloc[0]))
+
+    def test_duplicate_datetime_index_aligns_positionally(self):
+        """read() yields a repeating DatetimeIndex; alignment must stay positional."""
+        df = _make_series_df(
+            [
+                {"datetime_utc": "2026-03-06", "ebaseId": 1, "actual": 10.0, "revision": None},
+                {"datetime_utc": "2026-03-06", "ebaseId": 2, "actual": 50.0, "revision": None},
+                {"datetime_utc": "2026-04-03", "ebaseId": 1, "actual": 20.0, "revision": 7.0},
+            ]
+        )
+        df = df.set_index(pd.to_datetime(df["datetime_utc"], utc=True), drop=False)
+
+        result = actual_revised(df)
+
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result.iloc[0], 7.0)
+        self.assertEqual(result.iloc[1], 50.0)
+
+    def test_missing_columns_yield_all_nan(self):
+        df = pd.DataFrame({"actual": [1.0, 2.0]})
+
+        result = actual_revised(df)
+
+        self.assertEqual(len(result), 2)
+        self.assertTrue(result.isna().all())
+
+    def test_empty_frame_returns_empty_series(self):
+        df = pd.DataFrame(columns=["datetime_utc", "ebaseId", "actual", "revision"])
+
+        result = actual_revised(df)
+
+        self.assertEqual(len(result), 0)
