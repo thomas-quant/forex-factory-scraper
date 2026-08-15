@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-08-15
+
+### Fixed
+
+- **Every scrape returned HTTP 403 — the scraper was fully broken in 1.1.0 and 1.1.1.** `_scrape.py` hardcoded a `user-agent` header claiming `Chrome/131.0.0.0`, but `curl_cffi` 0.16 resolves the `impersonate="chrome"` alias to **chrome146**. The advertised UA and the underlying TLS/JA3 fingerprint disagreed, and Forex Factory rejected the mismatch on every request. The header is now removed — `curl_cffi` derives a User-Agent that matches whichever profile `IMPERSONATE` selects, so the two can no longer drift apart. If you saw `Failed to scrape … after 3 attempts: HTTP Error 403`, upgrade to 1.1.2.
+
+  `IMPERSONATE` deliberately stays the floating `"chrome"` alias rather than a pinned version: the defect was the *mismatch*, not the float, and pinning `chrome131` would freeze a 2024-era fingerprint that ages badly against anti-bot measures. A regression test now asserts `HEADERS` carries no `user-agent` key.
+
 ## [1.1.1] - 2026-06-14
 
 ### Fixed
